@@ -10,6 +10,7 @@ fn main() -> AppExit {
             ..default()
         }))
         .add_systems(Startup, display_title)
+        .add_systems(Update, remove_title)
         .run()
 }
 
@@ -42,4 +43,22 @@ fn display_title(mut commands: Commands) {
             )
         ],
     ));
+
+    commands.insert_resource(SplashScreenTimer(Timer::from_seconds(2.0, TimerMode::Once)));
+}
+
+#[derive(Resource)]
+struct SplashScreenTimer(Timer);
+
+fn remove_title(
+    #[allow(clippy::needless_pass_by_value)] time: Res<Time>,
+    mut timer: ResMut<SplashScreenTimer>,
+    mut commands: Commands,
+    nodes: Query<Entity, With<Node>>,
+) {
+    if timer.0.tick(time.delta()).just_finished() {
+        for entity in &nodes {
+            commands.entity(entity).despawn();
+        }
+    }
 }

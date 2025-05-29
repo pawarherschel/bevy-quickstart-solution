@@ -23,10 +23,6 @@
       </profile-state>
     </entry>
   </component>
-  <component name="RsExternalLinterProjectSettings">
-    <option name="additionalArguments" value="--all --all-targets -- -W clippy::pedantic -W clippy::nursery -W clippy::cargo" />
-    <option name="tool" value="Clippy" />
-  </component>
   <component name="RustProjectSettings">
     <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
   </component>
