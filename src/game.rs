@@ -1,6 +1,11 @@
 use crate::{GameAssets, GameState};
+use avian2d::prelude::{
+    AngularDamping, AngularVelocity, Collider, Collisions, LinearVelocity, RigidBody,
+};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use rand::Rng;
+use std::f32::consts::TAU;
 
 pub struct GamePlugin;
 
@@ -10,20 +15,11 @@ impl Plugin for GamePlugin {
             .add_systems(
                 FixedUpdate,
                 ((
-                    (control_player, slide, wrap_around, collision).chain(),
+                    (control_player, wrap_around, collision).chain(),
                     player_explosion.run_if(resource_exists::<PlayerExplosionTimer>),
                 )
                     .run_if(in_state(GameState::Game)),),
             );
-    }
-}
-
-#[derive(Component, Deref, DerefMut, Copy, Clone)]
-struct Velocity(Vec3);
-
-fn slide(entities: Query<(&mut Transform, &Velocity)>) {
-    for (mut transform, velocity) in entities {
-        transform.translation += velocity.0;
     }
 }
 
@@ -70,8 +66,10 @@ struct Asteroid;
 fn display_level(mut commands: Commands, game_assets: Res<GameAssets>) {
     commands.spawn((
         Sprite::from_image(game_assets.player_ship.clone()),
+        RigidBody::Dynamic,
+        Collider::circle(40.0),
+        AngularDamping(5.0),
         Player,
-        Velocity(Vec3::ZERO),
         WrapAround,
         children![(
             Visibility::Hidden,
@@ -81,6 +79,8 @@ fn display_level(mut commands: Commands, game_assets: Res<GameAssets>) {
         StateScoped(GameState::Game),
     ));
 
+    let mut rng = rand::thread_rng();
+
     for (x, y) in [-1.0, 1.0]
         .into_iter()
         .flat_map(|x| [1.0, -1.0].map(|y| (x, y)))
@@ -88,9 +88,14 @@ fn display_level(mut commands: Commands, game_assets: Res<GameAssets>) {
         commands.spawn((
             Sprite::from_image(game_assets.asteroid.clone()),
             Transform::from_xyz(300.0 * x, 200.0 * y, 0.0),
+            RigidBody::Dynamic,
+            Collider::circle(50.0),
+            LinearVelocity(Vec2::from_angle(rng.gen_range(0.0..TAU)) * rng.gen_range(10.0..100.0)),
+            AngularVelocity(
+                rng.gen_range(-std::f32::consts::FRAC_PI_2..std::f32::consts::FRAC_PI_2),
+            ),
             Asteroid,
             WrapAround,
-            Velocity(Vec2::from_angle(rand::random()).extend(0.0)),
             StateScoped(GameState::Game),
         ));
     }
@@ -98,27 +103,33 @@ fn display_level(mut commands: Commands, game_assets: Res<GameAssets>) {
 
 fn control_player(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut player: Query<(&mut Transform, &mut Velocity, &Children), With<Player>>,
+    mut player: Query<
+        (
+            &mut Transform,
+            &mut LinearVelocity,
+            &mut AngularVelocity,
+            &Children,
+        ),
+        With<Player>,
+    >,
     mut visibility: Query<&mut Visibility>,
-    time: Res<Time>,
 ) -> Result {
-    let Ok((mut player_transform, mut velocity, player_children)) = player.single_mut() else {
+    let Ok((player_transform, mut linear_velocity, mut angular_velocity, player_children)) =
+        player.single_mut()
+    else {
         return Ok(());
     };
 
-    let fixed_rotation_rate = 0.2;
-    let rotation_rate = fixed_rotation_rate / (1.0 / (60.0 * time.delta().as_secs_f32()));
-
     if keyboard_input.pressed(KeyCode::KeyA) {
-        player_transform.rotate_z(rotation_rate);
+        angular_velocity.0 += 0.4;
     }
     if keyboard_input.pressed(KeyCode::KeyD) {
-        player_transform.rotate_z(-rotation_rate);
+        angular_velocity.0 -= 0.4;
     }
     if keyboard_input.pressed(KeyCode::KeyW) {
         let forward = player_transform.local_y();
-        velocity.0 += *forward * 0.1;
-        velocity.0 = velocity.0.clamp_length(0.0, 10.0);
+        linear_velocity.0 += forward.xy() * 4.0;
+        linear_velocity.0 = linear_velocity.0.clamp_length_max(300.0);
     }
 
     for &child in player_children {
@@ -135,58 +146,32 @@ fn control_player(
 }
 
 fn collision(
-    asteroids: Query<(&Transform, Entity), With<Asteroid>>,
+    collisions: Collisions,
     player: Query<(&Transform, Entity), With<Player>>,
     game_assets: Res<GameAssets>,
     mut commands: Commands,
-    mut gizmos: Gizmos,
 ) -> Result {
-    let player_radius = 40.0;
-    let asteroid_radius = 50.0;
-
     let Ok((player_transform, player_entity)) = player.single() else {
         return Ok(());
     };
-    #[cfg(debug_assertions)]
-    {
-        gizmos.circle_2d(
-            Isometry2d::from_xy(
-                player_transform.translation.x,
-                player_transform.translation.y,
-            ),
-            player_radius,
-            Color::linear_rgb(0.0, 0.0, 1.0),
-        );
-    }
-    for (asteroid_transform, asteroid_entity) in &asteroids {
-        #[cfg(debug_assertions)]
-        {
-            gizmos.circle_2d(
-                Isometry2d::from_xy(
-                    asteroid_transform.translation.x,
-                    asteroid_transform.translation.y,
-                ),
-                asteroid_radius,
-                Color::linear_rgb(1.0, 0.0, 0.0),
-            );
+
+    for collision in collisions.collisions_with(player_entity) {
+        if let Some(body1) = collision.body1 {
+            commands.get_entity(body1)?.despawn();
+        }
+        if let Some(body2) = collision.body2 {
+            commands.get_entity(body2)?.despawn();
         }
 
-        let distance = asteroid_transform
-            .translation
-            .distance_squared(player_transform.translation);
-        if distance < (asteroid_radius + player_radius) * (asteroid_radius + player_radius) {
-            commands.get_entity(player_entity)?.despawn();
-            commands.get_entity(asteroid_entity)?.despawn();
-            commands.spawn((
-                Sprite::from_image(game_assets.explosion.clone()),
-                *player_transform,
-                StateScoped(GameState::Game),
-            ));
-            commands.insert_resource(PlayerExplosionTimer(Timer::from_seconds(
-                1.0,
-                TimerMode::Once,
-            )));
-        }
+        commands.spawn((
+            Sprite::from_image(game_assets.explosion.clone()),
+            *player_transform,
+            StateScoped(GameState::Game),
+        ));
+        commands.insert_resource(PlayerExplosionTimer(Timer::from_seconds(
+            1.0,
+            TimerMode::Once,
+        )));
     }
 
     Ok(())
