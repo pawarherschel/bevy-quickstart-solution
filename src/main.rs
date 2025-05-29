@@ -9,10 +9,22 @@ fn main() -> AppExit {
             }),
             ..default()
         }))
-        .add_systems(Startup, display_title)
-        .add_systems(Update, remove_title)
+        .init_state::<GameState>()
+        .enable_state_scoped_entities::<GameState>()
+        .add_systems(OnEnter(GameState::Splash), display_title)
+        .add_systems(Update, switch_to_menu.run_if(in_state(GameState::Splash)))
         .run()
 }
+
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, PartialEq, Eq, Hash, States, Default)]
+enum GameState {
+    #[default]
+    Splash,
+    StartMenu,
+}
+
+#[derive(Resource)]
+struct SplashScreenTimer(Timer);
 
 fn display_title(mut commands: Commands) {
     commands.spawn(Camera2d);
@@ -42,23 +54,18 @@ fn display_title(mut commands: Commands) {
                 }
             )
         ],
+        StateScoped(GameState::Splash),
     ));
 
     commands.insert_resource(SplashScreenTimer(Timer::from_seconds(2.0, TimerMode::Once)));
 }
 
-#[derive(Resource)]
-struct SplashScreenTimer(Timer);
-
-fn remove_title(
-    #[allow(clippy::needless_pass_by_value)] time: Res<Time>,
+fn switch_to_menu(
+    mut next: ResMut<NextState<GameState>>,
     mut timer: ResMut<SplashScreenTimer>,
-    mut commands: Commands,
-    nodes: Query<Entity, With<Node>>,
+    time: Res<Time>,
 ) {
     if timer.0.tick(time.delta()).just_finished() {
-        for entity in &nodes {
-            commands.entity(entity).despawn();
-        }
+        next.set(GameState::StartMenu);
     }
 }
