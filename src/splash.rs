@@ -55,6 +55,7 @@ fn load_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(GameAssets {
         player_ship: asset_server.load("playerShip1_green.png"),
         player_jet_fire: asset_server.load("fire07.png"),
+        explosion: asset_server.load("explosion00.png"),
         asteroid: asset_server.load("meteorBrown_big1.png"),
     });
 }

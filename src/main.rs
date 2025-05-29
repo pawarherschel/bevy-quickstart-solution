@@ -35,5 +35,6 @@ enum GameState {
 struct GameAssets {
     player_ship: Handle<Image>,
     player_jet_fire: Handle<Image>,
+    explosion: Handle<Image>,
     asteroid: Handle<Image>,
 }
