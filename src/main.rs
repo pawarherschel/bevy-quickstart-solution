@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod game;
 mod splash;
 mod start_menu;
 
@@ -14,7 +15,11 @@ fn main() -> AppExit {
         }))
         .init_state::<GameState>()
         .enable_state_scoped_entities::<GameState>()
-        .add_plugins((splash::SplashPlugin, start_menu::StartMenuPlugin))
+        .add_plugins((
+            splash::SplashPlugin,
+            start_menu::StartMenuPlugin,
+            game::GamePlugin,
+        ))
         .run()
 }
 
@@ -23,5 +28,5 @@ enum GameState {
     #[default]
     Splash,
     StartMenu,
-    Gameplay,
+    Game,
 }

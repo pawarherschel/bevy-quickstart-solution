@@ -56,6 +56,6 @@ fn display_start_menu(mut commands: Commands) {
 
 fn change_to_gameplay(mut next: ResMut<NextState<GameState>>, keyboard: Res<ButtonInput<KeyCode>>) {
     if keyboard.get_just_pressed().next().is_some() {
-        next.set(GameState::Gameplay);
+        next.set(GameState::Game);
     }
 }
