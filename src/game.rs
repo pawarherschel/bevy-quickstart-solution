@@ -1,5 +1,6 @@
 use crate::{GameAssets, GameState};
 use bevy::prelude::*;
+use log::{Level, log};
 
 pub struct GamePlugin;
 
@@ -8,7 +9,9 @@ impl Plugin for GamePlugin {
         app.add_systems(OnEnter(GameState::Game), display_level)
             .add_systems(
                 FixedUpdate,
-                control_player.run_if(in_state(GameState::Game)),
+                (control_player, collision)
+                    .chain()
+                    .run_if(in_state(GameState::Game)),
             );
     }
 }
@@ -35,12 +38,17 @@ fn display_level(mut commands: Commands, game_assets: Res<GameAssets>) {
         StateScoped(GameState::Game),
     ));
 
-    commands.spawn((
-        Sprite::from_image(game_assets.asteroid.clone()),
-        Transform::from_xyz(300.0, -200.0, 0.0),
-        Asteroid,
-        StateScoped(GameState::Game),
-    ));
+    for (x, y) in [-1.0, 1.0]
+        .into_iter()
+        .flat_map(|x| [1.0, -1.0].map(|y| (x, y)))
+    {
+        commands.spawn((
+            Sprite::from_image(game_assets.asteroid.clone()),
+            Transform::from_xyz(300.0 * x, 200.0 * y, 0.0),
+            Asteroid,
+            StateScoped(GameState::Game),
+        ));
+    }
 }
 
 fn control_player(
@@ -63,6 +71,7 @@ fn control_player(
     if keyboard_input.pressed(KeyCode::KeyW) {
         let forward = player_transform.local_y();
         velocity.0 += *forward;
+        velocity.0 = velocity.0.clamp_length(0.0, 5.0);
     }
 
     for &child in player_children {
@@ -75,7 +84,54 @@ fn control_player(
             });
     }
 
-    player_transform.translation += velocity.0.clamp_length(0.0, 20.0);
+    player_transform.translation += velocity.0;
+
+    Ok(())
+}
+
+fn collision(
+    asteroids: Query<&Transform, With<Asteroid>>,
+    player: Query<&Transform, With<Player>>,
+    mut gizmos: Gizmos,
+) -> Result {
+    let player_radius = 40.0;
+    let asteroid_radius = 50.0;
+
+    let player_transform = player.single()?;
+    #[cfg(debug_assertions)]
+    {
+        gizmos.circle_2d(
+            Isometry2d::from_xy(
+                player_transform.translation.x,
+                player_transform.translation.y,
+            ),
+            player_radius,
+            Color::linear_rgb(0.0, 0.0, 1.0),
+        );
+    }
+    for asteroid_transform in &asteroids {
+        #[cfg(debug_assertions)]
+        {
+            gizmos.circle_2d(
+                Isometry2d::from_xy(
+                    asteroid_transform.translation.x,
+                    asteroid_transform.translation.y,
+                ),
+                asteroid_radius,
+                Color::linear_rgb(1.0, 0.0, 0.0),
+            );
+        }
+
+        let distance = asteroid_transform
+            .translation
+            .distance_squared(player_transform.translation);
+        if distance < (asteroid_radius + player_radius) * (asteroid_radius + player_radius) {
+            #[cfg(debug_assertions)]
+            {
+                log!(Level::Info, "Collision");
+            }
+        }
+    }
 
     Ok(())
 }
