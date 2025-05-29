@@ -30,3 +30,8 @@ enum GameState {
     StartMenu,
     Game,
 }
+
+#[derive(Resource)]
+struct GameAssets {
+    player_ship: Handle<Image>,
+}

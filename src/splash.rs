@@ -1,13 +1,16 @@
 use bevy::prelude::*;
 
-use crate::GameState;
+use crate::{GameAssets, GameState};
 
 pub struct SplashPlugin;
 
 impl Plugin for SplashPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Splash), display_title)
-            .add_systems(Update, switch_to_menu.run_if(in_state(GameState::Splash)));
+        app.add_systems(
+            OnEnter(GameState::Splash),
+            (display_title, load_assets).chain(),
+        )
+        .add_systems(Update, switch_to_menu.run_if(in_state(GameState::Splash)));
     }
 }
 
@@ -46,6 +49,12 @@ fn display_title(mut commands: Commands) {
     ));
 
     commands.insert_resource(SplashScreenTimer(Timer::from_seconds(2.0, TimerMode::Once)));
+}
+
+fn load_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.insert_resource(GameAssets {
+        player_ship: asset_server.load("playerShip1_green.png"),
+    });
 }
 
 fn switch_to_menu(
